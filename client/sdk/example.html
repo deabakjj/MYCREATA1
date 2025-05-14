@@ -1,0 +1,747 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Nest Relay SDK 예제</title>
+  <style>
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      line-height: 1.6;
+      color: #333;
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+    
+    h1, h2, h3 {
+      color: #2a6b9c;
+    }
+    
+    .card {
+      background-color: #f9f9f9;
+      border-radius: 8px;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+      padding: 20px;
+      margin-bottom: 20px;
+    }
+    
+    .container {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 20px;
+    }
+    
+    .connection-section, .actions-section {
+      flex: 1;
+      min-width: 300px;
+    }
+    
+    .button {
+      background-color: #2a6b9c;
+      color: white;
+      border: none;
+      padding: 10px 15px;
+      border-radius: 4px;
+      cursor: pointer;
+      margin-right: 10px;
+      margin-bottom: 10px;
+      font-size: 14px;
+    }
+    
+    .button:hover {
+      background-color: #1d4e73;
+    }
+    
+    .button:disabled {
+      background-color: #cccccc;
+      cursor: not-allowed;
+    }
+    
+    .connect-button {
+      background-color: #4caf50;
+    }
+    
+    .connect-button:hover {
+      background-color: #388e3c;
+    }
+    
+    .disconnect-button {
+      background-color: #f44336;
+    }
+    
+    .disconnect-button:hover {
+      background-color: #d32f2f;
+    }
+    
+    .status {
+      padding: 10px;
+      border-radius: 4px;
+      margin-bottom: 15px;
+    }
+    
+    .status.connected {
+      background-color: #e8f5e9;
+      border: 1px solid #a5d6a7;
+    }
+    
+    .status.disconnected {
+      background-color: #ffebee;
+      border: 1px solid #ef9a9a;
+    }
+    
+    pre {
+      background-color: #f5f5f5;
+      padding: 15px;
+      border-radius: 4px;
+      overflow-x: auto;
+      font-size: 14px;
+    }
+    
+    .logs {
+      height: 200px;
+      overflow-y: auto;
+      background-color: #f5f5f5;
+      padding: 15px;
+      border-radius: 4px;
+      font-family: monospace;
+      margin-top: 20px;
+    }
+    
+    .log-entry {
+      margin-bottom: 5px;
+      border-bottom: 1px solid #e0e0e0;
+      padding-bottom: 5px;
+    }
+    
+    .log-entry.error {
+      color: #f44336;
+    }
+    
+    .log-entry.success {
+      color: #4caf50;
+    }
+    
+    .log-entry.info {
+      color: #2a6b9c;
+    }
+    
+    .modal {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(0, 0, 0, 0.5);
+      z-index: 1000;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+    
+    .modal-content {
+      background-color: white;
+      padding: 20px;
+      border-radius: 8px;
+      width: 80%;
+      max-width: 600px;
+      max-height: 80vh;
+      overflow-y: auto;
+    }
+    
+    .close-button {
+      position: absolute;
+      top: 10px;
+      right: 20px;
+      font-size: 24px;
+      cursor: pointer;
+      color: #666;
+    }
+    
+    .tabs {
+      display: flex;
+      margin-bottom: 15px;
+      border-bottom: 1px solid #ddd;
+    }
+    
+    .tab {
+      padding: 10px 15px;
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+    }
+    
+    .tab.active {
+      border-bottom: 2px solid #2a6b9c;
+      color: #2a6b9c;
+    }
+    
+    .tab-content {
+      display: none;
+    }
+    
+    .tab-content.active {
+      display: block;
+    }
+  </style>
+</head>
+<body>
+  <h1>Nest Relay SDK 예제</h1>
+  
+  <div class="container">
+    <div class="connection-section">
+      <div class="card">
+        <h2>연결 관리</h2>
+        <div id="connection-status" class="status disconnected">
+          <strong>상태:</strong> <span id="status-text">연결되지 않음</span>
+        </div>
+        
+        <div id="connection-info" style="display: none;">
+          <p><strong>Nest ID:</strong> <span id="nestid-text">-</span></p>
+          <p><strong>지갑 주소:</strong> <span id="wallet-text">-</span></p>
+          <p><strong>권한:</strong></p>
+          <pre id="permissions-json">-</pre>
+        </div>
+        
+        <div>
+          <button id="connect-button" class="button connect-button">Nest로 연결</button>
+          <button id="connect-modal-button" class="button connect-button">모달로 연결</button>
+          <button id="disconnect-button" class="button disconnect-button" disabled>연결 해제</button>
+        </div>
+      </div>
+    </div>
+    
+    <div class="actions-section">
+      <div class="card">
+        <h2>서명 요청</h2>
+        <div>
+          <button id="sign-message-button" class="button" disabled>메시지 서명</button>
+          <button id="personal-sign-button" class="button" disabled>개인 메시지 서명</button>
+          <button id="sign-typed-data-button" class="button" disabled>타입 데이터 서명</button>
+          <button id="sign-transaction-button" class="button" disabled>트랜잭션 서명</button>
+          <button id="sign-gasless-button" class="button" disabled>가스리스 트랜잭션</button>
+        </div>
+        
+        <div id="result-container" style="display: none;">
+          <h3>결과</h3>
+          <pre id="result-json"></pre>
+        </div>
+      </div>
+    </div>
+  </div>
+  
+  <div class="card">
+    <h2>이벤트 로그</h2>
+    <button id="clear-logs-button" class="button">로그 지우기</button>
+    <div id="logs" class="logs"></div>
+  </div>
+  
+  <div id="transaction-modal" class="modal" style="display: none;">
+    <div class="modal-content">
+      <span class="close-button">&times;</span>
+      <h2>트랜잭션 수정</h2>
+      
+      <div class="tabs">
+        <div class="tab active" data-tab="simple">간단 모드</div>
+        <div class="tab" data-tab="advanced">고급 모드</div>
+      </div>
+      
+      <div class="tab-content active" data-tab="simple">
+        <div>
+          <p><strong>수신자 주소:</strong></p>
+          <input type="text" id="tx-to" class="input" value="0x742d35Cc6634C0532925a3b844Bc454e4438f44e" style="width: 100%;">
+        </div>
+        <div>
+          <p><strong>보낼 금액 (CTA):</strong></p>
+          <input type="text" id="tx-value" class="input" value="0.1" style="width: 100%;">
+        </div>
+        <div>
+          <p><strong>가스 한도:</strong></p>
+          <input type="text" id="tx-gas-limit" class="input" value="21000" style="width: 100%;">
+        </div>
+        <div>
+          <p><strong>가스 가격 (wei):</strong></p>
+          <input type="text" id="tx-gas-price" class="input" value="5000000000" style="width: 100%;">
+        </div>
+      </div>
+      
+      <div class="tab-content" data-tab="advanced">
+        <p><strong>트랜잭션 JSON:</strong></p>
+        <textarea id="tx-json" style="width: 100%; height: 200px;">
+{
+  "to": "0x742d35Cc6634C0532925a3b844Bc454e4438f44e",
+  "value": "0.1",
+  "data": "0x",
+  "gasLimit": "21000",
+  "gasPrice": "5000000000",
+  "nonce": 0,
+  "chainId": 1000
+}
+        </textarea>
+      </div>
+      
+      <div style="margin-top: 20px;">
+        <button id="send-transaction-button" class="button">서명 요청</button>
+        <button id="send-modal-transaction-button" class="button">모달로 서명 요청</button>
+        <button id="cancel-transaction-button" class="button">취소</button>
+      </div>
+    </div>
+  </div>
+  
+  <!-- SDK 스크립트 로드 -->
+  <script src="NestRelaySDK.js"></script>
+  
+  <script>
+    // SDK 초기화
+    const nestRelay = new NestRelaySDK({
+      apiUrl: 'https://api.nest.creatachain.com', // 실제 API URL로 변경 필요
+      dappName: 'Nest Relay 예제',
+      dappDomain: 'example.creatachain.com', // 실제 도메인으로 변경 필요
+      dappLogo: 'https://creatachain.com/logo.png', // 실제 로고 URL로 변경 필요
+      dappDescription: 'Nest Relay SDK 사용 예제'
+    });
+    
+    // DOM 요소
+    const connectButton = document.getElementById('connect-button');
+    const connectModalButton = document.getElementById('connect-modal-button');
+    const disconnectButton = document.getElementById('disconnect-button');
+    const signMessageButton = document.getElementById('sign-message-button');
+    const personalSignButton = document.getElementById('personal-sign-button');
+    const signTypedDataButton = document.getElementById('sign-typed-data-button');
+    const signTransactionButton = document.getElementById('sign-transaction-button');
+    const signGaslessButton = document.getElementById('sign-gasless-button');
+    const connectionStatus = document.getElementById('connection-status');
+    const statusText = document.getElementById('status-text');
+    const nestIdText = document.getElementById('nestid-text');
+    const walletText = document.getElementById('wallet-text');
+    const permissionsJson = document.getElementById('permissions-json');
+    const connectionInfo = document.getElementById('connection-info');
+    const resultContainer = document.getElementById('result-container');
+    const resultJson = document.getElementById('result-json');
+    const logsContainer = document.getElementById('logs');
+    const clearLogsButton = document.getElementById('clear-logs-button');
+    const transactionModal = document.getElementById('transaction-modal');
+    const closeButton = document.querySelector('.close-button');
+    const txToInput = document.getElementById('tx-to');
+    const txValueInput = document.getElementById('tx-value');
+    const txGasLimitInput = document.getElementById('tx-gas-limit');
+    const txGasPriceInput = document.getElementById('tx-gas-price');
+    const txJsonTextarea = document.getElementById('tx-json');
+    const sendTransactionButton = document.getElementById('send-transaction-button');
+    const sendModalTransactionButton = document.getElementById('send-modal-transaction-button');
+    const cancelTransactionButton = document.getElementById('cancel-transaction-button');
+    const tabs = document.querySelectorAll('.tab');
+    const tabContents = document.querySelectorAll('.tab-content');
+    
+    // 이벤트 핸들러
+    
+    // 탭 전환
+    tabs.forEach(tab => {
+      tab.addEventListener('click', () => {
+        const tabId = tab.getAttribute('data-tab');
+        
+        // 모든 탭 비활성화
+        tabs.forEach(t => t.classList.remove('active'));
+        tabContents.forEach(tc => tc.classList.remove('active'));
+        
+        // 선택한 탭 활성화
+        tab.classList.add('active');
+        document.querySelector(`.tab-content[data-tab="${tabId}"]`).classList.add('active');
+      });
+    });
+    
+    // 연결 상태 업데이트
+    function updateConnectionStatus() {
+      const isConnected = nestRelay.isConnected();
+      
+      if (isConnected) {
+        connectionStatus.className = 'status connected';
+        statusText.textContent = '연결됨';
+        connectionInfo.style.display = 'block';
+        
+        const nestId = nestRelay.getNestId();
+        const walletAddress = nestRelay.getWalletAddress();
+        const permissions = nestRelay.getPermissions();
+        
+        if (nestId) {
+          nestIdText.textContent = `${nestId.name}.nest (${nestId.domain})`;
+        } else {
+          nestIdText.textContent = '정보 없음';
+        }
+        
+        walletText.textContent = walletAddress || '정보 없음';
+        permissionsJson.textContent = JSON.stringify(permissions, null, 2);
+        
+        connectButton.disabled = true;
+        connectModalButton.disabled = true;
+        disconnectButton.disabled = false;
+        
+        // 권한에 따라 버튼 활성화/비활성화
+        const canSign = nestRelay.hasPermission('requestSignature');
+        signMessageButton.disabled = !canSign;
+        personalSignButton.disabled = !canSign;
+        signTypedDataButton.disabled = !canSign;
+        signTransactionButton.disabled = !canSign;
+        signGaslessButton.disabled = !canSign || !nestRelay.hasPermission('useGasless');
+      } else {
+        connectionStatus.className = 'status disconnected';
+        statusText.textContent = '연결되지 않음';
+        connectionInfo.style.display = 'none';
+        
+        connectButton.disabled = false;
+        connectModalButton.disabled = false;
+        disconnectButton.disabled = true;
+        
+        signMessageButton.disabled = true;
+        personalSignButton.disabled = true;
+        signTypedDataButton.disabled = true;
+        signTransactionButton.disabled = true;
+        signGaslessButton.disabled = true;
+      }
+    }
+    
+    // 로그 추가
+    function addLog(message, type = 'info') {
+      const logEntry = document.createElement('div');
+      logEntry.className = `log-entry ${type}`;
+      
+      const timestamp = new Date().toLocaleTimeString();
+      logEntry.textContent = `[${timestamp}] ${message}`;
+      
+      logsContainer.appendChild(logEntry);
+      
+      // 스크롤을 맨 아래로
+      logsContainer.scrollTop = logsContainer.scrollHeight;
+    }
+    
+    // 결과 표시
+    function showResult(result) {
+      resultContainer.style.display = 'block';
+      resultJson.textContent = JSON.stringify(result, null, 2);
+    }
+    
+    // 결과 숨기기
+    function hideResult() {
+      resultContainer.style.display = 'none';
+      resultJson.textContent = '';
+    }
+    
+    // 트랜잭션 모달 열기
+    function openTransactionModal() {
+      // 간단 모드 폼 값을 설정
+      txToInput.value = '0x742d35Cc6634C0532925a3b844Bc454e4438f44e';
+      txValueInput.value = '0.1';
+      txGasLimitInput.value = '21000';
+      txGasPriceInput.value = '5000000000';
+      
+      // 고급 모드 JSON 값 설정
+      const defaultTx = {
+        to: '0x742d35Cc6634C0532925a3b844Bc454e4438f44e',
+        value: '0.1',
+        data: '0x',
+        gasLimit: '21000',
+        gasPrice: '5000000000',
+        nonce: 0,
+        chainId: 1000
+      };
+      
+      txJsonTextarea.value = JSON.stringify(defaultTx, null, 2);
+      
+      // 모달 표시
+      transactionModal.style.display = 'flex';
+    }
+    
+    // 트랜잭션 모달 닫기
+    function closeTransactionModal() {
+      transactionModal.style.display = 'none';
+    }
+    
+    // 트랜잭션 객체 가져오기
+    function getTransactionObject() {
+      const activeTab = document.querySelector('.tab.active').getAttribute('data-tab');
+      
+      if (activeTab === 'simple') {
+        return {
+          to: txToInput.value,
+          value: txValueInput.value,
+          data: '0x',
+          gasLimit: txGasLimitInput.value,
+          gasPrice: txGasPriceInput.value,
+          nonce: 0,
+          chainId: 1000
+        };
+      } else {
+        try {
+          return JSON.parse(txJsonTextarea.value);
+        } catch (error) {
+          addLog(`JSON 파싱 오류: ${error.message}`, 'error');
+          return null;
+        }
+      }
+    }
+    
+    // SDK 이벤트 리스너
+    nestRelay.on('connect', (data) => {
+      addLog(`연결 성공: ${data.nestId ? data.nestId.name : 'Unknown'}.nest`, 'success');
+      updateConnectionStatus();
+    });
+    
+    nestRelay.on('disconnect', () => {
+      addLog('연결 해제됨', 'info');
+      updateConnectionStatus();
+      hideResult();
+    });
+    
+    nestRelay.on('error', (error) => {
+      addLog(`오류: ${error.message}`, 'error');
+    });
+    
+    nestRelay.on('transactionRequest', (data) => {
+      addLog(`트랜잭션 요청: ${data.type}`, 'info');
+    });
+    
+    nestRelay.on('transactionApproved', (data) => {
+      addLog(`트랜잭션 승인됨: ${data.transactionId.substring(0, 8)}...`, 'success');
+    });
+    
+    nestRelay.on('transactionRejected', (data) => {
+      addLog(`트랜잭션 거부됨: ${data.reason}`, 'error');
+    });
+    
+    // 연결 버튼
+    connectButton.addEventListener('click', async () => {
+      try {
+        addLog('연결 시도 중...', 'info');
+        const result = await nestRelay.connect();
+        showResult(result);
+      } catch (error) {
+        addLog(`연결 실패: ${error.message}`, 'error');
+      }
+    });
+    
+    // 모달로 연결 버튼
+    connectModalButton.addEventListener('click', async () => {
+      try {
+        addLog('모달로 연결 시도 중...', 'info');
+        const result = await nestRelay.connect({ modal: true });
+        showResult(result);
+      } catch (error) {
+        addLog(`연결 실패: ${error.message}`, 'error');
+      }
+    });
+    
+    // 연결 해제 버튼
+    disconnectButton.addEventListener('click', async () => {
+      try {
+        addLog('연결 해제 중...', 'info');
+        await nestRelay.disconnect();
+      } catch (error) {
+        addLog(`연결 해제 실패: ${error.message}`, 'error');
+      }
+    });
+    
+    // 메시지 서명 버튼
+    signMessageButton.addEventListener('click', async () => {
+      try {
+        const message = prompt('서명할 메시지를 입력하세요:', 'Hello, Nest!');
+        
+        if (!message) {
+          return;
+        }
+        
+        addLog(`메시지 서명 요청: "${message}"`, 'info');
+        const result = await nestRelay.signMessage({ message });
+        showResult(result);
+        addLog('메시지 서명 성공', 'success');
+      } catch (error) {
+        addLog(`메시지 서명 실패: ${error.message}`, 'error');
+      }
+    });
+    
+    // 개인 메시지 서명 버튼
+    personalSignButton.addEventListener('click', async () => {
+      try {
+        const message = prompt('서명할 개인 메시지를 입력하세요:', 'Hello, Nest!');
+        
+        if (!message) {
+          return;
+        }
+        
+        addLog(`개인 메시지 서명 요청: "${message}"`, 'info');
+        const result = await nestRelay.personalSign({ message });
+        showResult(result);
+        addLog('개인 메시지 서명 성공', 'success');
+      } catch (error) {
+        addLog(`개인 메시지 서명 실패: ${error.message}`, 'error');
+      }
+    });
+    
+    // 타입 데이터 서명 버튼
+    signTypedDataButton.addEventListener('click', async () => {
+      try {
+        const typedData = {
+          types: {
+            EIP712Domain: [
+              { name: 'name', type: 'string' },
+              { name: 'version', type: 'string' },
+              { name: 'chainId', type: 'uint256' },
+              { name: 'verifyingContract', type: 'address' }
+            ],
+            Person: [
+              { name: 'name', type: 'string' },
+              { name: 'wallet', type: 'address' }
+            ],
+            Mail: [
+              { name: 'from', type: 'Person' },
+              { name: 'to', type: 'Person' },
+              { name: 'contents', type: 'string' }
+            ]
+          },
+          primaryType: 'Mail',
+          domain: {
+            name: 'Nest Relay 예제',
+            version: '1',
+            chainId: 1000,
+            verifyingContract: '0xCcCCccccCCCCcCCCCCCcCcCccCcCCCcCcccccccC'
+          },
+          message: {
+            from: {
+              name: 'Alice',
+              wallet: '0xCD2a3d9F938E13CD947Ec05AbC7FE734Df8DD826'
+            },
+            to: {
+              name: 'Bob',
+              wallet: '0xbBbBBBBbbBBBbbbBbbBbbbbBBbBbbbbBbBbbBBbB'
+            },
+            contents: 'Hello, Bob!'
+          }
+        };
+        
+        addLog(`타입 데이터 서명 요청`, 'info');
+        const result = await nestRelay.signTypedData({ typedData });
+        showResult(result);
+        addLog('타입 데이터 서명 성공', 'success');
+      } catch (error) {
+        addLog(`타입 데이터 서명 실패: ${error.message}`, 'error');
+      }
+    });
+    
+    // 트랜잭션 서명 버튼
+    signTransactionButton.addEventListener('click', () => {
+      openTransactionModal();
+    });
+    
+    // 가스리스 트랜잭션 버튼
+    signGaslessButton.addEventListener('click', async () => {
+      try {
+        openTransactionModal();
+      } catch (error) {
+        addLog(`가스리스 트랜잭션 실패: ${error.message}`, 'error');
+      }
+    });
+    
+    // 트랜잭션 서명 요청 버튼
+    sendTransactionButton.addEventListener('click', async () => {
+      try {
+        const transaction = getTransactionObject();
+        
+        if (!transaction) {
+          return;
+        }
+        
+        closeTransactionModal();
+        
+        addLog(`트랜잭션 서명 요청`, 'info');
+        const result = await nestRelay.signTransaction(transaction);
+        showResult(result);
+        addLog('트랜잭션 서명 성공', 'success');
+        
+        // 트랜잭션 완료 보고 (예시)
+        setTimeout(() => {
+          try {
+            // 실제로는 블록체인에 트랜잭션을 전송하고 결과를 얻어야 함
+            const txHash = '0x' + Math.random().toString(16).substring(2, 68);
+            const blockNumber = Math.floor(Math.random() * 1000000);
+            
+            nestRelay.completeTransaction(result.transactionId, txHash, blockNumber)
+              .then(() => {
+                addLog(`트랜잭션 완료 보고 성공: ${txHash.substring(0, 10)}...`, 'success');
+              })
+              .catch((error) => {
+                addLog(`트랜잭션 완료 보고 실패: ${error.message}`, 'error');
+              });
+          } catch (error) {
+            addLog(`트랜잭션 완료 보고 실패: ${error.message}`, 'error');
+          }
+        }, 2000);
+      } catch (error) {
+        addLog(`트랜잭션 서명 실패: ${error.message}`, 'error');
+      }
+    });
+    
+    // 모달로 트랜잭션 서명 요청 버튼
+    sendModalTransactionButton.addEventListener('click', async () => {
+      try {
+        const transaction = getTransactionObject();
+        
+        if (!transaction) {
+          return;
+        }
+        
+        closeTransactionModal();
+        
+        addLog(`모달로 트랜잭션 서명 요청`, 'info');
+        const result = await nestRelay.signTransaction(transaction, { modal: true });
+        showResult(result);
+        addLog('트랜잭션 서명 성공', 'success');
+        
+        // 트랜잭션 완료 보고 (예시)
+        setTimeout(() => {
+          try {
+            // 실제로는 블록체인에 트랜잭션을 전송하고 결과를 얻어야 함
+            const txHash = '0x' + Math.random().toString(16).substring(2, 68);
+            const blockNumber = Math.floor(Math.random() * 1000000);
+            
+            nestRelay.completeTransaction(result.transactionId, txHash, blockNumber)
+              .then(() => {
+                addLog(`트랜잭션 완료 보고 성공: ${txHash.substring(0, 10)}...`, 'success');
+              })
+              .catch((error) => {
+                addLog(`트랜잭션 완료 보고 실패: ${error.message}`, 'error');
+              });
+          } catch (error) {
+            addLog(`트랜잭션 완료 보고 실패: ${error.message}`, 'error');
+          }
+        }, 2000);
+      } catch (error) {
+        addLog(`트랜잭션 서명 실패: ${error.message}`, 'error');
+      }
+    });
+    
+    // 트랜잭션 취소 버튼
+    cancelTransactionButton.addEventListener('click', () => {
+      closeTransactionModal();
+    });
+    
+    // 모달 닫기 버튼
+    closeButton.addEventListener('click', () => {
+      closeTransactionModal();
+    });
+    
+    // 로그 지우기 버튼
+    clearLogsButton.addEventListener('click', () => {
+      logsContainer.innerHTML = '';
+    });
+    
+    // 초기 상태 업데이트
+    updateConnectionStatus();
+    
+    // 저장된 연결 복원 시도
+    if (nestRelay.isConnected()) {
+      addLog('저장된 연결 복원됨', 'success');
+    } else {
+      addLog('SDK 준비 완료', 'info');
+    }
+  </script>
+</body>
+</html>
