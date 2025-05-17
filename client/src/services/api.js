@@ -6,7 +6,7 @@
 import axios from 'axios';
 
 // API 기본 URL 설정
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
+const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3000/api';
 
 // 기본 axios 인스턴스 생성
 const api = axios.create({
@@ -20,7 +20,7 @@ const api = axios.create({
 api.interceptors.request.use(
   (config) => {
     // 로컬 스토리지에서 토큰 가져오기
-    const token = localStorage.getItem('token');
+    const token = localStorage.getItem('nest-auth-token');
     
     // 토큰이 있으면 헤더에 추가
     if (token) {
@@ -43,7 +43,7 @@ api.interceptors.response.use(
     // 토큰 만료 등의 인증 오류 처리
     if (error.response && error.response.status === 401) {
       // 로컬 스토리지에서 토큰 제거
-      localStorage.removeItem('token');
+      localStorage.removeItem('nest-auth-token');
       
       // 로그인 페이지로 리디렉션 (React Router가 설정된 경우)
       if (window.location.pathname !== '/login') {

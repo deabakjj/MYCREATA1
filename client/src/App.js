@@ -18,8 +18,7 @@ import TokenSwapPage from './pages/tokens/TokenSwapPage';
 import NotFoundPage from './pages/NotFoundPage';
 
 // 컨텍스트 프로바이더
-import { AuthProvider, useAuth } from './context/AuthContext';
-import { ThemeProvider } from './context/ThemeContext';
+import { useAuth } from './context/AuthContext';
 import { TokenProvider } from './context/TokenContext';
 import { XpProvider } from './context/XpContext';
 import { NftProvider } from './context/NftContext';
@@ -31,21 +30,6 @@ import { NftProvider } from './context/NftContext';
  * 모든 컨텍스트 프로바이더를 포함하고 있습니다.
  */
 function App() {
-  return (
-    <ThemeProvider>
-      <AuthProvider>
-        <AppContent />
-      </AuthProvider>
-    </ThemeProvider>
-  );
-}
-
-/**
- * 앱 내용 컴포넌트
- * 
- * AuthContext를 사용하기 위해 분리된 컴포넌트입니다.
- */
-function AppContent() {
   const { user, isLoading, checkAuthStatus } = useAuth();
   
   // 페이지 로드 시 인증 상태 확인

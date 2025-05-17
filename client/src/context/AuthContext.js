@@ -1,4 +1,6 @@
 import React, { createContext, useState, useContext, useEffect } from 'react';
+import api from '../services/api';
+import authService from '../services/authService';
 
 /**
  * 인증 컨텍스트
@@ -14,66 +16,81 @@ export const AuthProvider = ({ children }) => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // 사용자 세션 초기화 - 앱 시작시 실행
-  useEffect(() => {
-    const initializeAuth = async () => {
-      try {
-        setIsLoading(true);
-        
-        // 세션 확인 (토큰이 localStorage나 쿠키에 저장되어 있는지)
-        const token = localStorage.getItem('nest-auth-token');
-        
-        if (token) {
-          // 토큰 검증 및 사용자 정보 가져오기
-          const response = await fetch('/api/auth/verify', {
-            headers: {
-              Authorization: `Bearer ${token}`
-            }
-          });
-          
-          if (response.ok) {
-            const userData = await response.json();
-            setUser(userData);
-          } else {
-            // 토큰이 유효하지 않으면 제거
-            localStorage.removeItem('nest-auth-token');
-            setUser(null);
-          }
+  // 인증 상태 확인 함수
+  const checkAuthStatus = async () => {
+    try {
+      setIsLoading(true);
+      
+      // 토큰 가져오기
+      const token = localStorage.getItem('nest-auth-token');
+      
+      if (token) {
+        try {
+          // 백엔드 API 호출하여 토큰 검증
+          const response = await api.get('/auth/me');
+          setUser(response.data.user);
+        } catch (err) {
+          // 토큰이 유효하지 않은 경우
+          console.error('Token verification failed:', err);
+          localStorage.removeItem('nest-auth-token');
+          setUser(null);
         }
-      } catch (err) {
-        console.error('Authentication initialization error:', err);
-        setError('인증 초기화 중 오류가 발생했습니다.');
-      } finally {
-        setIsLoading(false);
+      } else {
+        setUser(null);
       }
-    };
+    } catch (err) {
+      console.error('Auth status check error:', err);
+      setError('인증 상태 확인 중 오류가 발생했습니다.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
-    initializeAuth();
+  // 앱 시작 시 인증 상태 확인
+  useEffect(() => {
+    checkAuthStatus();
   }, []);
 
   // 구글 로그인 함수
   const loginWithGoogle = async () => {
     try {
       setIsLoading(true);
+      setError(null);
       
-      // Web3Auth 또는 백엔드 API를 통한 구글 로그인 요청
-      const response = await fetch('/api/auth/google', {
-        method: 'POST'
+      // 백엔드에서 구글 로그인 URL 가져오기
+      const authData = await authService.getSocialLoginUrl('google');
+      
+      // 팝업 창 열기
+      const popup = window.open(authData.url, 'googleLogin', 'width=600,height=700');
+      
+      // 팝업 창 닫힘 및 메시지 수신 대기
+      return new Promise((resolve, reject) => {
+        window.addEventListener('message', async (event) => {
+          // 보안 검사: 이벤트 출처 확인
+          if (event.origin !== window.location.origin) return;
+          
+          try {
+            // 인증 코드 처리
+            if (event.data.type === 'social-callback' && event.data.provider === 'google') {
+              popup.close();
+              
+              // 백엔드에 인증 코드 전송
+              const response = await authService.handleSocialCallback('google', event.data.code);
+              
+              // 인증 토큰 저장
+              localStorage.setItem('nest-auth-token', response.token);
+              
+              // 사용자 정보 설정
+              setUser(response.user);
+              resolve(response.user);
+            }
+          } catch (err) {
+            console.error('Google login processing error:', err);
+            setError('구글 로그인 처리 중 오류가 발생했습니다.');
+            reject(err);
+          }
+        });
       });
-      
-      if (!response.ok) {
-        throw new Error('Google login failed');
-      }
-      
-      const data = await response.json();
-      
-      // 인증 토큰 저장
-      localStorage.setItem('nest-auth-token', data.token);
-      
-      // 사용자 정보 설정
-      setUser(data.user);
-      
-      return data.user;
     } catch (err) {
       console.error('Google login error:', err);
       setError('구글 로그인 중 오류가 발생했습니다.');
@@ -87,22 +104,42 @@ export const AuthProvider = ({ children }) => {
   const loginWithKakao = async () => {
     try {
       setIsLoading(true);
+      setError(null);
       
-      // 카카오 로그인 로직
-      const response = await fetch('/api/auth/kakao', {
-        method: 'POST'
+      // 백엔드에서 카카오 로그인 URL 가져오기
+      const authData = await authService.getSocialLoginUrl('kakao');
+      
+      // 팝업 창 열기
+      const popup = window.open(authData.url, 'kakaoLogin', 'width=600,height=700');
+      
+      // 팝업 창 닫힘 및 메시지 수신 대기
+      return new Promise((resolve, reject) => {
+        window.addEventListener('message', async (event) => {
+          // 보안 검사: 이벤트 출처 확인
+          if (event.origin !== window.location.origin) return;
+          
+          try {
+            // 인증 코드 처리
+            if (event.data.type === 'social-callback' && event.data.provider === 'kakao') {
+              popup.close();
+              
+              // 백엔드에 인증 코드 전송
+              const response = await authService.handleSocialCallback('kakao', event.data.code);
+              
+              // 인증 토큰 저장
+              localStorage.setItem('nest-auth-token', response.token);
+              
+              // 사용자 정보 설정
+              setUser(response.user);
+              resolve(response.user);
+            }
+          } catch (err) {
+            console.error('Kakao login processing error:', err);
+            setError('카카오 로그인 처리 중 오류가 발생했습니다.');
+            reject(err);
+          }
+        });
       });
-      
-      if (!response.ok) {
-        throw new Error('Kakao login failed');
-      }
-      
-      const data = await response.json();
-      
-      localStorage.setItem('nest-auth-token', data.token);
-      setUser(data.user);
-      
-      return data.user;
     } catch (err) {
       console.error('Kakao login error:', err);
       setError('카카오 로그인 중 오류가 발생했습니다.');
@@ -116,22 +153,42 @@ export const AuthProvider = ({ children }) => {
   const loginWithApple = async () => {
     try {
       setIsLoading(true);
+      setError(null);
       
-      // 애플 로그인 로직
-      const response = await fetch('/api/auth/apple', {
-        method: 'POST'
+      // 백엔드에서 애플 로그인 URL 가져오기
+      const authData = await authService.getSocialLoginUrl('apple');
+      
+      // 팝업 창 열기
+      const popup = window.open(authData.url, 'appleLogin', 'width=600,height=700');
+      
+      // 팝업 창 닫힘 및 메시지 수신 대기
+      return new Promise((resolve, reject) => {
+        window.addEventListener('message', async (event) => {
+          // 보안 검사: 이벤트 출처 확인
+          if (event.origin !== window.location.origin) return;
+          
+          try {
+            // 인증 코드 처리
+            if (event.data.type === 'social-callback' && event.data.provider === 'apple') {
+              popup.close();
+              
+              // 백엔드에 인증 코드 전송
+              const response = await authService.handleSocialCallback('apple', event.data.code);
+              
+              // 인증 토큰 저장
+              localStorage.setItem('nest-auth-token', response.token);
+              
+              // 사용자 정보 설정
+              setUser(response.user);
+              resolve(response.user);
+            }
+          } catch (err) {
+            console.error('Apple login processing error:', err);
+            setError('애플 로그인 처리 중 오류가 발생했습니다.');
+            reject(err);
+          }
+        });
       });
-      
-      if (!response.ok) {
-        throw new Error('Apple login failed');
-      }
-      
-      const data = await response.json();
-      
-      localStorage.setItem('nest-auth-token', data.token);
-      setUser(data.user);
-      
-      return data.user;
     } catch (err) {
       console.error('Apple login error:', err);
       setError('애플 로그인 중 오류가 발생했습니다.');
@@ -145,14 +202,10 @@ export const AuthProvider = ({ children }) => {
   const logout = async () => {
     try {
       setIsLoading(true);
+      setError(null);
       
-      // 백엔드 로그아웃 요청 (필요한 경우)
-      await fetch('/api/auth/logout', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('nest-auth-token')}`
-        }
-      });
+      // 백엔드 로그아웃 API 호출
+      await authService.logout();
       
       // 로컬 스토리지에서 토큰 제거
       localStorage.removeItem('nest-auth-token');
@@ -167,22 +220,13 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  // 지갑 정보 가져오기 (사용자에게 보여줄 간단한 정보만)
+  // 지갑 정보 가져오기
   const getWalletInfo = async () => {
     if (!user) return null;
     
     try {
-      const response = await fetch('/api/wallet/info', {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('nest-auth-token')}`
-        }
-      });
-      
-      if (!response.ok) {
-        throw new Error('Failed to fetch wallet info');
-      }
-      
-      return await response.json();
+      const walletInfo = await api.get('/wallet/info');
+      return walletInfo.data;
     } catch (err) {
       console.error('Error fetching wallet info:', err);
       setError('지갑 정보를 가져오는 중 오류가 발생했습니다.');
@@ -200,7 +244,8 @@ export const AuthProvider = ({ children }) => {
         loginWithKakao,
         loginWithApple,
         logout,
-        getWalletInfo
+        getWalletInfo,
+        checkAuthStatus
       }}
     >
       {children}
