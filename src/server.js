@@ -13,6 +13,7 @@ const { connectDB, disconnectDB } = require('./config/database');
 const config = require('./config');
 const logger = require('./utils/logger');
 const errorMiddleware = require('./api/middlewares/error');
+const redisCache = require('./cache/redis');
 
 // 라우터 가져오기
 const authRoutes = require('./api/routes/auth');
@@ -26,12 +27,19 @@ const groupMissionRoutes = require('./api/routes/groupMissionRoutes');
 const relayRoutes = require('./api/routes/relayRoutes');
 const reputationGraphRoutes = require('./api/routes/reputationGraphRoutes');
 const analyticsRoutes = require('./api/routes/analytics');
+const metricsRoutes = require('./api/routes/metrics');
 
 // Express 앱 초기화
 const app = express();
 
 // 데이터베이스 연결
 connectDB();
+
+// Redis 초기화 (활성화된 경우에만)
+if (config.redis && config.redis.enabled) {
+  redisCache.initRedis();
+  logger.info('Redis 캐싱 서비스가 초기화되었습니다.');
+}
 
 // 보안 미들웨어
 app.use(helmet());
@@ -82,6 +90,7 @@ app.use('/api/group-missions', groupMissionRoutes);
 app.use('/api/relay', relayRoutes);
 app.use('/api/reputation', reputationGraphRoutes);
 app.use('/api/analytics', analyticsRoutes);
+app.use('/api/metrics', metricsRoutes);
 
 // 404 핸들러
 app.use((req, res, next) => {
@@ -131,7 +140,16 @@ const gracefulShutdown = () => {
     logger.info('Express 서버가 종료되었습니다.');
     
     try {
+      // 데이터베이스 연결 종료
       await disconnectDB();
+      logger.info('데이터베이스 연결이 종료되었습니다.');
+      
+      // Redis 연결 종료 (활성화된 경우에만)
+      if (config.redis && config.redis.enabled) {
+        await redisCache.closeRedis();
+        logger.info('Redis 연결이 종료되었습니다.');
+      }
+      
       logger.info('안전하게 종료되었습니다.');
       process.exit(0);
     } catch (error) {

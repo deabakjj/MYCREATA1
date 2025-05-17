@@ -5,12 +5,17 @@
 
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
 const Web3 = require('web3');
 const config = require('../config');
 const User = require('../models/user');
 const Wallet = require('../models/wallet');
 const logger = require('../utils/logger');
-const { generateEthereumWallet } = require('../blockchain/walletService');
+const { 
+  generateEthereumWallet, 
+  encryptPrivateKey 
+} = require('../blockchain/walletService');
+const keyManager = require('../utils/keyManager');
 
 /**
  * 사용자 등록(회원가입) 처리
@@ -40,7 +45,7 @@ const register = async (userData) => {
   await user.save();
   
   // 지갑 자동 생성
-  const wallet = await createWalletForUser(user._id);
+  const wallet = await createWalletForUser(user._id, password);
   
   // 사용자 정보에 지갑 주소 업데이트
   user.wallet = {
@@ -170,8 +175,9 @@ const socialLogin = async (socialData) => {
     // 사용자 저장
     await user.save();
     
-    // 지갑 자동 생성
-    const wallet = await createWalletForUser(user._id);
+    // 지갑 자동 생성 (소셜 로그인은 임의 비밀번호 사용)
+    const randomPassword = crypto.randomBytes(16).toString('hex');
+    const wallet = await createWalletForUser(user._id, randomPassword);
     
     // 사용자 정보에 지갑 주소 업데이트
     user.wallet = {
@@ -194,7 +200,9 @@ const socialLogin = async (socialData) => {
     
     // 지갑이 없다면 생성
     if (!user.wallet || !user.wallet.address) {
-      const wallet = await createWalletForUser(user._id);
+      // 소셜 로그인은 임의 비밀번호 사용
+      const randomPassword = crypto.randomBytes(16).toString('hex');
+      const wallet = await createWalletForUser(user._id, randomPassword);
       
       user.wallet = {
         address: wallet.address,
@@ -371,9 +379,10 @@ const resetPassword = async (resetToken, newPassword) => {
  * 사용자의 지갑 생성
  * 
  * @param {ObjectId} userId - 사용자 ID
+ * @param {string} password - 암호화에 사용할 비밀번호
  * @returns {Promise<Object>} 생성된 지갑 정보
  */
-const createWalletForUser = async (userId) => {
+const createWalletForUser = async (userId, password) => {
   try {
     // 사용자 조회
     const user = await User.findById(userId);
@@ -390,22 +399,25 @@ const createWalletForUser = async (userId) => {
     }
     
     // 새 이더리움 지갑 생성
-    const { address, privateKey } = await generateEthereumWallet();
+    const { address, privateKey, mnemonic, encryptedMnemonic } = await generateEthereumWallet();
     
-    // 개인키 암호화 (실제 구현에서는 더 안전한 방식 필요)
-    const encryptedPrivateKey = await bcrypt.hash(privateKey, 10);
+    // 개인키 암호화 (안전한 방식으로)
+    const encryptedPrivateKeyData = encryptPrivateKey(privateKey, password);
     
     // 지갑 모델 생성
     const wallet = new Wallet({
       user: userId,
       address,
-      encryptedPrivateKey,
+      encryptedPrivateKey: JSON.stringify(encryptedPrivateKeyData),
+      encryptedMnemonic: JSON.stringify(encryptedMnemonic),
       creationMethod: 'auto',
       status: 'active',
       tokenBalances: {
         nest: 0,
         cta: 0,
       },
+      createdAt: new Date(),
+      updatedAt: new Date(),
     });
     
     // 지갑 저장

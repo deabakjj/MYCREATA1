@@ -1,69 +1,171 @@
 /**
  * @file 지갑 서비스
- * @description 블록체인 지갑 관련 기능을 제공하는 서비스
+ * @description 이더리움 및 CreataChain 지갑 생성 및 관리 기능 제공
  */
 
+const crypto = require('crypto');
 const Web3 = require('web3');
-const ethers = require('ethers');
-const config = require('../config');
+const { hdkey } = require('ethereumjs-wallet');
+const bip39 = require('bip39');
 const logger = require('../utils/logger');
-
-// CreataChain RPC URL (환경에 따라 다름)
-const RPC_URL = config.env === 'production' 
-  ? config.blockchain.mainnet.rpc
-  : config.blockchain.testnet.rpc;
+const config = require('../config');
+const keyManager = require('../utils/keyManager');
 
 // Web3 인스턴스 생성
-const web3 = new Web3(new Web3.providers.HttpProvider(RPC_URL));
+const mainnetWeb3 = new Web3(config.blockchain.creataMainnetRpc);
+const testnetWeb3 = new Web3(config.blockchain.creataTestnetRpc);
+
+// 현재 환경에 맞는 Web3 선택
+const getWeb3 = (network = 'mainnet') => {
+  return network === 'testnet' ? testnetWeb3 : mainnetWeb3;
+};
 
 /**
- * 새 이더리움 지갑 생성
+ * 이더리움 지갑 생성
  * 
- * @returns {Promise<Object>} 생성된 지갑 정보 (주소 및 개인키)
+ * @returns {Promise<Object>} 생성된 지갑 정보 (주소, 개인키)
  */
 const generateEthereumWallet = async () => {
   try {
-    // 새 계정 생성
-    const account = web3.eth.accounts.create();
+    // 니모닉 생성 (24단어)
+    const mnemonic = bip39.generateMnemonic(256);
+    
+    // 니모닉에서 시드 생성
+    const seed = await bip39.mnemonicToSeed(mnemonic);
+    
+    // HD 지갑 생성
+    const hdWallet = hdkey.fromMasterSeed(seed);
+    
+    // 경로에서 첫 번째 계정 도출
+    const path = "m/44'/60'/0'/0/0";
+    const wallet = hdWallet.derivePath(path).getWallet();
+    
+    // 주소와 개인키 추출
+    const address = '0x' + wallet.getAddress().toString('hex');
+    const privateKey = wallet.getPrivateKey().toString('hex');
+    
+    // 니모닉 암호화
+    const encryptedMnemonic = keyManager.encryptData(mnemonic, config.encryption.mnemonicKey);
+    
+    logger.info(`새 이더리움 지갑 생성됨: ${address}`);
     
     return {
-      address: account.address,
-      privateKey: account.privateKey,
+      address,
+      privateKey,
+      mnemonic,
+      encryptedMnemonic,
     };
   } catch (error) {
-    logger.error(`이더리움 지갑 생성 실패: ${error.message}`);
+    logger.error(`지갑 생성 오류: ${error.message}`);
     throw new Error('지갑 생성 중 오류가 발생했습니다.');
   }
 };
 
 /**
- * 계정 추상화를 통한 지갑 생성 (ERC-4337 기반)
- * 
- * @param {string} email - 사용자 이메일 (소셜 ID)
- * @returns {Promise<Object>} 생성된 AA 지갑 정보
+ * 니모닉 암호화
+ * @deprecated keyManager.encryptData 사용 권장
+ * @param {string} mnemonic - 암호화할 니모닉
+ * @returns {Object} 암호화된 니모닉 정보
  */
-const generateAAWallet = async (email) => {
+const encryptMnemonic = (mnemonic) => {
   try {
-    // 실제 구현에서는 Biconomy, ZeroDev, Etherspot 등의 AA SDK 활용
-    // 여기서는 간단한 데모로 유사 로직만 구현
+    return keyManager.encryptData(mnemonic, config.encryption.mnemonicKey);
+  } catch (error) {
+    logger.error(`니모닉 암호화 오류: ${error.message}`);
+    throw new Error('니모닉 암호화 중 오류가 발생했습니다.');
+  }
+};
+
+/**
+ * 니모닉 복호화
+ * @deprecated keyManager.decryptData 사용 권장
+ * @param {Object} encryptedMnemonic - 암호화된 니모닉 정보
+ * @returns {string} 복호화된 니모닉
+ */
+const decryptMnemonic = (encryptedMnemonic) => {
+  try {
+    return keyManager.decryptData(encryptedMnemonic, config.encryption.mnemonicKey);
+  } catch (error) {
+    logger.error(`니모닉 복호화 오류: ${error.message}`);
+    throw new Error('니모닉 복호화 중 오류가 발생했습니다.');
+  }
+};
+
+/**
+ * 트랜잭션 서명 및 전송
+ * 
+ * @param {Object} txData - 트랜잭션 데이터
+ * @param {string} privateKey - 개인키
+ * @param {string} network - 네트워크 (mainnet 또는 testnet)
+ * @returns {Promise<string>} 트랜잭션 해시
+ */
+const signAndSendTransaction = async (txData, privateKey, network = 'mainnet') => {
+  try {
+    const web3 = getWeb3(network);
     
-    // 이메일을 시드로 사용하여 일관된 지갑 주소 생성
-    const seedHash = web3.utils.keccak256(email);
-    const wallet = ethers.Wallet.fromMnemonic(
-      ethers.utils.entropyToMnemonic(seedHash.slice(2, 34))
+    // 트랜잭션 서명
+    const signedTx = await web3.eth.accounts.signTransaction(
+      txData,
+      privateKey
     );
     
-    // AA 지갑은 실제로는 더 복잡한 배포 과정 필요
-    // 여기서는 개념적 구현만 포함
+    // 서명된 트랜잭션 전송
+    const receipt = await web3.eth.sendSignedTransaction(
+      signedTx.rawTransaction
+    );
     
-    return {
-      address: wallet.address,
-      privateKey: wallet.privateKey,
-      type: 'aa',
-    };
+    logger.info(`트랜잭션 전송 성공: ${receipt.transactionHash}`);
+    
+    return receipt.transactionHash;
   } catch (error) {
-    logger.error(`AA 지갑 생성 실패: ${error.message}`);
-    throw new Error('AA 지갑 생성 중 오류가 발생했습니다.');
+    logger.error(`트랜잭션 전송 오류: ${error.message}`);
+    throw new Error('트랜잭션 전송 중 오류가 발생했습니다: ' + error.message);
+  }
+};
+
+/**
+ * 트랜잭션 서명 (전송하지 않음)
+ * 
+ * @param {Object} txData - 트랜잭션 데이터
+ * @param {string} privateKey - 개인키
+ * @param {string} network - 네트워크 (mainnet 또는 testnet)
+ * @returns {Promise<Object>} 서명된 트랜잭션
+ */
+const signTransaction = async (txData, privateKey, network = 'mainnet') => {
+  try {
+    const web3 = getWeb3(network);
+    
+    // 트랜잭션 서명
+    const signedTx = await web3.eth.accounts.signTransaction(
+      txData,
+      privateKey
+    );
+    
+    return signedTx;
+  } catch (error) {
+    logger.error(`트랜잭션 서명 오류: ${error.message}`);
+    throw new Error('트랜잭션 서명 중 오류가 발생했습니다: ' + error.message);
+  }
+};
+
+/**
+ * 지갑 잔액 조회
+ * 
+ * @param {string} address - 지갑 주소
+ * @param {string} network - 네트워크 (mainnet 또는 testnet)
+ * @returns {Promise<string>} 잔액 (wei 단위)
+ */
+const getWalletBalance = async (address, network = 'mainnet') => {
+  try {
+    const web3 = getWeb3(network);
+    
+    // 잔액 조회
+    const balance = await web3.eth.getBalance(address);
+    
+    return balance;
+  } catch (error) {
+    logger.error(`잔액 조회 오류: ${error.message}`);
+    throw new Error('잔액 조회 중 오류가 발생했습니다.');
   }
 };
 
@@ -71,19 +173,16 @@ const generateAAWallet = async (email) => {
  * 토큰 잔액 조회
  * 
  * @param {string} address - 지갑 주소
- * @param {string} tokenAddress - 토큰 컨트랙트 주소 (null이면 기본 CTA)
+ * @param {string} tokenAddress - 토큰 컨트랙트 주소
+ * @param {string} network - 네트워크 (mainnet 또는 testnet)
  * @returns {Promise<string>} 토큰 잔액
  */
-const getTokenBalance = async (address, tokenAddress = null) => {
+const getTokenBalance = async (address, tokenAddress, network = 'mainnet') => {
   try {
-    // 기본 코인(CTA) 잔액 조회
-    if (!tokenAddress) {
-      const balance = await web3.eth.getBalance(address);
-      return web3.utils.fromWei(balance, 'ether');
-    }
+    const web3 = getWeb3(network);
     
-    // ERC20 토큰 잔액 조회
-    const minABI = [
+    // ERC20 ABI - balanceOf 함수만 포함
+    const minimalABI = [
       {
         constant: true,
         inputs: [{ name: '_owner', type: 'address' }],
@@ -91,397 +190,113 @@ const getTokenBalance = async (address, tokenAddress = null) => {
         outputs: [{ name: 'balance', type: 'uint256' }],
         type: 'function',
       },
-      {
-        constant: true,
-        inputs: [],
-        name: 'decimals',
-        outputs: [{ name: '', type: 'uint8' }],
-        type: 'function',
-      },
     ];
     
-    const contract = new web3.eth.Contract(minABI, tokenAddress);
-    const decimals = await contract.methods.decimals().call();
-    const balance = await contract.methods.balanceOf(address).call();
+    // 토큰 컨트랙트 인스턴스 생성
+    const tokenContract = new web3.eth.Contract(minimalABI, tokenAddress);
     
-    return balance / Math.pow(10, decimals);
+    // 토큰 잔액 조회
+    const balance = await tokenContract.methods.balanceOf(address).call();
+    
+    return balance;
   } catch (error) {
-    logger.error(`토큰 잔액 조회 실패: ${error.message}`);
+    logger.error(`토큰 잔액 조회 오류: ${error.message}`);
     throw new Error('토큰 잔액 조회 중 오류가 발생했습니다.');
   }
 };
 
 /**
- * ERC20 토큰 전송
+ * 니모닉 분산 저장 (Shamir's Secret Sharing 사용)
  * 
- * @param {string} privateKey - 발신자 개인키
- * @param {string} to - 수신자 주소
- * @param {string} tokenAddress - 토큰 컨트랙트 주소
- * @param {number} amount - 전송량
- * @returns {Promise<Object>} 트랜잭션 결과
+ * @param {string} mnemonic - 니모닉
+ * @param {number} totalShards - 총 조각 수 (기본값: 3)
+ * @param {number} threshold - 복구에 필요한 최소 조각 수 (기본값: 2)
+ * @returns {Array<string>} 니모닉 조각
  */
-const transferERC20Token = async (privateKey, to, tokenAddress, amount) => {
+const shardMnemonic = (mnemonic, totalShards = 3, threshold = 2) => {
   try {
-    // 계정 생성
-    const account = web3.eth.accounts.privateKeyToAccount(privateKey);
-    web3.eth.accounts.wallet.add(account);
-    web3.eth.defaultAccount = account.address;
-    
-    // 토큰 컨트랙트 인스턴스 생성
-    const minABI = [
-      {
-        constant: false,
-        inputs: [
-          { name: '_to', type: 'address' },
-          { name: '_value', type: 'uint256' },
-        ],
-        name: 'transfer',
-        outputs: [{ name: '', type: 'bool' }],
-        type: 'function',
-      },
-      {
-        constant: true,
-        inputs: [],
-        name: 'decimals',
-        outputs: [{ name: '', type: 'uint8' }],
-        type: 'function',
-      },
-    ];
-    
-    const contract = new web3.eth.Contract(minABI, tokenAddress);
-    
-    // 토큰 소수점 확인
-    const decimals = await contract.methods.decimals().call();
-    
-    // 전송량에 소수점 적용
-    const tokenAmount = amount * Math.pow(10, decimals);
-    
-    // 전송 트랜잭션 생성
-    const tx = {
-      from: account.address,
-      to: tokenAddress,
-      gas: 100000,
-      data: contract.methods.transfer(to, tokenAmount).encodeABI(),
-    };
-    
-    // 트랜잭션 전송
-    const receipt = await web3.eth.sendTransaction(tx);
-    
-    // 지갑에서 계정 제거 (보안)
-    web3.eth.accounts.wallet.remove(account.address);
-    
-    return {
-      success: true,
-      txHash: receipt.transactionHash,
-      blockNumber: receipt.blockNumber,
-    };
+    // keyManager를 사용하여 보다 안전한 방식으로 비밀 분할
+    return keyManager.splitSecret(mnemonic, totalShards, threshold);
   } catch (error) {
-    logger.error(`토큰 전송 실패: ${error.message}`);
-    throw new Error('토큰 전송 중 오류가 발생했습니다.');
+    logger.error(`니모닉 샤딩 오류: ${error.message}`);
+    throw new Error('니모닉 샤딩 중 오류가 발생했습니다.');
   }
 };
 
 /**
- * NFT 민팅
+ * 니모닉 샤드 복구
  * 
- * @param {string} privateKey - 발신자 개인키
- * @param {string} to - 수신자 주소
- * @param {string} nftAddress - NFT 컨트랙트 주소
- * @param {number} tokenTypeId - 토큰 유형 ID
- * @param {string} tokenURI - 토큰 메타데이터 URI
- * @returns {Promise<Object>} 트랜잭션 결과
+ * @param {Array<string>} shards - 니모닉 조각
+ * @returns {string} 복구된 니모닉
  */
-const mintNFT = async (privateKey, to, nftAddress, tokenTypeId, tokenURI) => {
+const recoverFromShards = (shards) => {
   try {
-    // 계정 생성
-    const account = web3.eth.accounts.privateKeyToAccount(privateKey);
-    web3.eth.accounts.wallet.add(account);
-    web3.eth.defaultAccount = account.address;
-    
-    // NFT 컨트랙트 ABI (실제 NestNFT 컨트랙트에 맞게 수정 필요)
-    const nftABI = [
-      {
-        inputs: [
-          { name: 'to', type: 'address' },
-          { name: 'typeId', type: 'uint256' },
-          { name: 'uri', type: 'string' },
-        ],
-        name: 'safeMint',
-        outputs: [{ name: '', type: 'uint256' }],
-        stateMutability: 'nonpayable',
-        type: 'function',
-      },
-    ];
-    
-    // 컨트랙트 인스턴스 생성
-    const contract = new web3.eth.Contract(nftABI, nftAddress);
-    
-    // 민팅 트랜잭션 생성
-    const tx = {
-      from: account.address,
-      to: nftAddress,
-      gas: 500000,
-      data: contract.methods.safeMint(to, tokenTypeId, tokenURI).encodeABI(),
-    };
-    
-    // 트랜잭션 전송
-    const receipt = await web3.eth.sendTransaction(tx);
-    
-    // 이벤트에서 토큰 ID 추출
-    const tokenId = receipt.logs[0].topics[3];
-    
-    // 지갑에서 계정 제거 (보안)
-    web3.eth.accounts.wallet.remove(account.address);
-    
-    return {
-      success: true,
-      txHash: receipt.transactionHash,
-      tokenId,
-      blockNumber: receipt.blockNumber,
-    };
+    // keyManager를 사용하여 비밀 복구
+    return keyManager.recoverSecret(shards);
   } catch (error) {
-    logger.error(`NFT 민팅 실패: ${error.message}`);
-    throw new Error('NFT 민팅 중 오류가 발생했습니다.');
+    logger.error(`니모닉 복구 오류: ${error.message}`);
+    throw new Error('니모닉 복구 중 오류가 발생했습니다.');
   }
 };
 
 /**
- * Nest ID 등록
+ * 개인키 암호화
  * 
- * @param {string} privateKey - 발신자 개인키
- * @param {string} name - 등록할 이름 (예: 'example', .nest는 자동으로 붙음)
- * @returns {Promise<Object>} 트랜잭션 결과
+ * @param {string} privateKey - 암호화할 개인키
+ * @param {string} password - 암호화에 사용할 비밀번호
+ * @returns {Object} 암호화된 개인키 정보
  */
-const registerNestId = async (privateKey, name) => {
+const encryptPrivateKey = (privateKey, password) => {
   try {
-    // 계정 생성
-    const account = web3.eth.accounts.privateKeyToAccount(privateKey);
-    web3.eth.accounts.wallet.add(account);
-    web3.eth.defaultAccount = account.address;
+    // 비밀번호로부터 키 파생
+    const { key, salt } = keyManager.deriveKeyFromPassword(password);
     
-    // Nest 레지스트리 컨트랙트 주소
-    const registryAddress = config.env === 'production'
-      ? config.blockchain.mainnet.contracts.nestNameRegistry
-      : config.blockchain.testnet.contracts.nestNameRegistry;
+    // 개인키 암호화
+    const encryptedData = keyManager.encryptData(privateKey, key);
     
-    // Nest 레지스트리 ABI
-    const registryABI = [
-      {
-        inputs: [{ name: 'name', type: 'string' }],
-        name: 'registerSelf',
-        outputs: [{ name: '', type: 'bool' }],
-        stateMutability: 'nonpayable',
-        type: 'function',
-      },
-    ];
-    
-    // 컨트랙트 인스턴스 생성
-    const contract = new web3.eth.Contract(registryABI, registryAddress);
-    
-    // 등록 트랜잭션 생성
-    const tx = {
-      from: account.address,
-      to: registryAddress,
-      gas: 300000,
-      data: contract.methods.registerSelf(name).encodeABI(),
-    };
-    
-    // 트랜잭션 전송
-    const receipt = await web3.eth.sendTransaction(tx);
-    
-    // 지갑에서 계정 제거 (보안)
-    web3.eth.accounts.wallet.remove(account.address);
-    
+    // 솔트 추가
     return {
-      success: true,
-      txHash: receipt.transactionHash,
-      nestId: `${name}.nest`,
-      blockNumber: receipt.blockNumber,
+      ...encryptedData,
+      salt
     };
   } catch (error) {
-    logger.error(`Nest ID 등록 실패: ${error.message}`);
-    throw new Error('Nest ID 등록 중 오류가 발생했습니다.');
+    logger.error(`개인키 암호화 오류: ${error.message}`);
+    throw new Error('개인키 암호화 중 오류가 발생했습니다.');
   }
 };
 
 /**
- * Nest ID 조회
+ * 개인키 복호화
  * 
- * @param {string} address - 지갑 주소
- * @returns {Promise<string>} Nest ID
+ * @param {Object} encryptedData - 암호화된 개인키 정보
+ * @param {string} password - 암호화에 사용한 비밀번호
+ * @returns {string} 복호화된 개인키
  */
-const getNestId = async (address) => {
+const decryptPrivateKey = (encryptedData, password) => {
   try {
-    // Nest 레지스트리 컨트랙트 주소
-    const registryAddress = config.env === 'production'
-      ? config.blockchain.mainnet.contracts.nestNameRegistry
-      : config.blockchain.testnet.contracts.nestNameRegistry;
+    const { salt } = encryptedData;
     
-    // Nest 레지스트리 ABI
-    const registryABI = [
-      {
-        inputs: [{ name: 'addr', type: 'address' }],
-        name: 'getName',
-        outputs: [{ name: '', type: 'string' }],
-        stateMutability: 'view',
-        type: 'function',
-      },
-    ];
+    // 비밀번호로부터 키 파생
+    const { key } = keyManager.deriveKeyFromPassword(password, salt);
     
-    // 컨트랙트 인스턴스 생성
-    const contract = new web3.eth.Contract(registryABI, registryAddress);
-    
-    // Nest ID 조회
-    const name = await contract.methods.getName(address).call();
-    
-    if (!name) {
-      return null;
-    }
-    
-    return `${name}.nest`;
+    // 개인키 복호화
+    return keyManager.decryptData(encryptedData, key);
   } catch (error) {
-    logger.error(`Nest ID 조회 실패: ${error.message}`);
-    throw new Error('Nest ID 조회 중 오류가 발생했습니다.');
-  }
-};
-
-/**
- * 토큰 스왑 (CTA <-> NEST)
- * 
- * @param {string} privateKey - 발신자 개인키
- * @param {string} fromToken - 전환할 토큰 ('CTA' 또는 'NEST')
- * @param {number} amount - 전환할 양
- * @returns {Promise<Object>} 트랜잭션 결과
- */
-const swapTokens = async (privateKey, fromToken, amount) => {
-  try {
-    // 계정 생성
-    const account = web3.eth.accounts.privateKeyToAccount(privateKey);
-    web3.eth.accounts.wallet.add(account);
-    web3.eth.defaultAccount = account.address;
-    
-    // Nest 스왑 컨트랙트 주소
-    const swapAddress = config.env === 'production'
-      ? config.blockchain.mainnet.contracts.nestSwap
-      : config.blockchain.testnet.contracts.nestSwap;
-    
-    // 토큰 주소
-    const nestTokenAddress = config.env === 'production'
-      ? config.blockchain.mainnet.contracts.nestToken
-      : config.blockchain.testnet.contracts.nestToken;
-    
-    // ERC20 ABI
-    const erc20ABI = [
-      {
-        inputs: [
-          { name: 'spender', type: 'address' },
-          { name: 'amount', type: 'uint256' },
-        ],
-        name: 'approve',
-        outputs: [{ name: '', type: 'bool' }],
-        stateMutability: 'nonpayable',
-        type: 'function',
-      },
-      {
-        constant: true,
-        inputs: [],
-        name: 'decimals',
-        outputs: [{ name: '', type: 'uint8' }],
-        type: 'function',
-      },
-    ];
-    
-    // Nest 스왑 ABI
-    const swapABI = [
-      {
-        inputs: [{ name: 'ctaAmount', type: 'uint256' }],
-        name: 'swapCtaToNest',
-        outputs: [{ name: '', type: 'uint256' }],
-        stateMutability: 'nonpayable',
-        type: 'function',
-      },
-      {
-        inputs: [{ name: 'nestAmount', type: 'uint256' }],
-        name: 'swapNestToCta',
-        outputs: [{ name: '', type: 'uint256' }],
-        stateMutability: 'nonpayable',
-        type: 'function',
-      },
-    ];
-    
-    // 트랜잭션 실행
-    let receipt;
-    
-    if (fromToken === 'CTA') {
-      // CTA -> NEST 전환
-      // CTA는 네이티브 토큰이므로 직접 전송
-      const swapContract = new web3.eth.Contract(swapABI, swapAddress);
-      
-      const tx = {
-        from: account.address,
-        to: swapAddress,
-        gas: 200000,
-        value: web3.utils.toWei(amount.toString(), 'ether'),
-        data: swapContract.methods.swapCtaToNest(web3.utils.toWei(amount.toString(), 'ether')).encodeABI(),
-      };
-      
-      receipt = await web3.eth.sendTransaction(tx);
-    } else if (fromToken === 'NEST') {
-      // NEST -> CTA 전환
-      // 먼저 NEST 토큰 사용 승인
-      const nestContract = new web3.eth.Contract(erc20ABI, nestTokenAddress);
-      const decimals = await nestContract.methods.decimals().call();
-      const tokenAmount = amount * Math.pow(10, decimals);
-      
-      const approveTx = {
-        from: account.address,
-        to: nestTokenAddress,
-        gas: 100000,
-        data: nestContract.methods.approve(swapAddress, tokenAmount).encodeABI(),
-      };
-      
-      await web3.eth.sendTransaction(approveTx);
-      
-      // 이후 스왑 실행
-      const swapContract = new web3.eth.Contract(swapABI, swapAddress);
-      
-      const swapTx = {
-        from: account.address,
-        to: swapAddress,
-        gas: 200000,
-        data: swapContract.methods.swapNestToCta(tokenAmount).encodeABI(),
-      };
-      
-      receipt = await web3.eth.sendTransaction(swapTx);
-    } else {
-      throw new Error('지원하지 않는 토큰 유형입니다.');
-    }
-    
-    // 지갑에서 계정 제거 (보안)
-    web3.eth.accounts.wallet.remove(account.address);
-    
-    return {
-      success: true,
-      txHash: receipt.transactionHash,
-      blockNumber: receipt.blockNumber,
-      fromToken,
-      toToken: fromToken === 'CTA' ? 'NEST' : 'CTA',
-      fromAmount: amount,
-      // 실제로는 이벤트에서 받은 금액을 추출해야 함
-    };
-  } catch (error) {
-    logger.error(`토큰 스왑 실패: ${error.message}`);
-    throw new Error('토큰 스왑 중 오류가 발생했습니다.');
+    logger.error(`개인키 복호화 오류: ${error.message}`);
+    throw new Error('개인키 복호화 중 오류가 발생했습니다.');
   }
 };
 
 module.exports = {
   generateEthereumWallet,
-  generateAAWallet,
+  encryptMnemonic,
+  decryptMnemonic,
+  signAndSendTransaction,
+  signTransaction,
+  getWalletBalance,
   getTokenBalance,
-  transferERC20Token,
-  mintNFT,
-  registerNestId,
-  getNestId,
-  swapTokens,
+  shardMnemonic,
+  recoverFromShards,
+  encryptPrivateKey,
+  decryptPrivateKey
 };

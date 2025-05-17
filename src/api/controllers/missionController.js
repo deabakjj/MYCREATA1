@@ -11,6 +11,7 @@ const Wallet = require('../../models/wallet');
 const walletService = require('../../blockchain/walletService');
 const logger = require('../../utils/logger');
 const mongoose = require('mongoose');
+const { invalidateEntityCache, invalidateCache } = require('../middlewares/cache');
 
 /**
  * 미션 목록 조회
@@ -368,6 +369,14 @@ const startMission = async (req, res, next) => {
     // 미션 통계 업데이트
     mission.stats.participantCount += 1;
     await mission.save();
+    
+    // 미션 관련 캐시 무효화
+    await invalidateCache('missions:*');
+    
+    // 활성화된 미션인 경우 활성화 미션 캐시 무효화
+    if (mission.status === 'active') {
+      await invalidateCache('missions:active:*');
+    }
     
     // 활동 기록
     await Activity.create({
@@ -756,6 +765,9 @@ const createMission = async (req, res, next) => {
     
     await mission.save();
     
+    // 미션 관련 캐시 무효화
+    await invalidateCache('missions:*');
+    
     // 활동 기록
     await Activity.create({
       user: userId,
@@ -833,6 +845,10 @@ const updateMission = async (req, res, next) => {
     
     await mission.save();
     
+    // 미션 관련 캐시 무효화
+    await invalidateEntityCache('mission', id);
+    await invalidateCache('missions:*');
+    
     // 활동 기록
     await Activity.create({
       user: userId,
@@ -903,6 +919,11 @@ const deleteMission = async (req, res, next) => {
     
     // 미션 삭제
     await mission.remove();
+    
+    // 미션 관련 캐시 무효화
+    await invalidateEntityCache('mission', id);
+    await invalidateCache('missions:*');
+    await invalidateCache('missions:active:*');
     
     // 활동 기록
     await Activity.create({
@@ -980,6 +1001,15 @@ const updateMissionStatus = async (req, res, next) => {
     }
     
     await mission.save();
+    
+    // 미션 관련 캐시 무효화
+    await invalidateEntityCache('mission', id);
+    await invalidateCache('missions:*');
+    
+    // 활성화 미션 캐시 특별히 무효화
+    if (status === 'active' || status === 'completed' || status === 'cancelled') {
+      await invalidateCache('missions:active:*');
+    }
     
     // 활동 기록
     await Activity.create({

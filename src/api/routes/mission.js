@@ -8,6 +8,8 @@ const { body, param, query } = require('express-validator');
 const missionController = require('../controllers/missionController');
 const validate = require('../middlewares/validate');
 const { authenticate, authorize } = require('../middlewares/auth');
+const { cacheMiddleware, invalidateEntityCache } = require('../middlewares/cache');
+const config = require('../../config');
 
 const router = express.Router();
 
@@ -19,14 +21,26 @@ router.use(authenticate);
  * @desc 미션 목록 조회
  * @access Private
  */
-router.get('/', missionController.getMissions);
+router.get('/', 
+  cacheMiddleware({ 
+    ttl: config.redis.cache.paths['/api/missions'] || config.redis.cache.defaultTTL,
+    keyGenerator: (req) => `missions:list:${req.query.page || '1'}:${req.query.limit || '10'}:${req.query.sort || 'createdAt'}`
+  }),
+  missionController.getMissions
+);
 
 /**
  * @route GET /api/missions/active
  * @desc 활성화된 미션 목록 조회
  * @access Private
  */
-router.get('/active', missionController.getActiveMissions);
+router.get('/active', 
+  cacheMiddleware({ 
+    ttl: 180, // 3분 (새로운 미션이 활성화될 수 있으므로 비교적 짧게 설정)
+    keyGenerator: (req) => `missions:active:${req.query.page || '1'}:${req.query.limit || '10'}`
+  }),
+  missionController.getActiveMissions
+);
 
 /**
  * @route GET /api/missions/recommended
@@ -48,6 +62,10 @@ router.get(
       .withMessage('유효한 미션 ID가 아닙니다.'),
     validate,
   ],
+  cacheMiddleware({ 
+    ttl: 300, // 5분
+    keyGenerator: (req) => `mission:detail:${req.params.id}`
+  }),
   missionController.getMissionById
 );
 
