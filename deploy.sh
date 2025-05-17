@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Nest Platform Deployment Script
+# Nest Platform Deployment Script (Updated)
 # This script automates the deployment of the Nest Platform
 
 # Exit on error
@@ -45,6 +45,60 @@ done
 mkdir -p logs
 mkdir -p ssl
 mkdir -p monitoring
+mkdir -p client/public/error-pages
+
+# Ensure error pages exist
+if [ ! -f client/public/error-pages/404.html ]; then
+  echo "Creating default error pages..."
+  
+  # Create 404 page
+  cat > client/public/error-pages/404.html << EOF
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>404 Not Found</title>
+  <style>
+    body { font-family: sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
+    .error-container { text-align: center; max-width: 500px; }
+    h1 { font-size: 72px; margin: 0; color: #3f51b5; }
+  </style>
+</head>
+<body>
+  <div class="error-container">
+    <h1>404</h1>
+    <h2>페이지를 찾을 수 없습니다</h2>
+    <p>요청하신 페이지가 존재하지 않거나 이동되었을 수 있습니다.</p>
+    <a href="/">홈으로 돌아가기</a>
+  </div>
+</body>
+</html>
+EOF
+
+  # Create 50x page
+  cat > client/public/error-pages/50x.html << EOF
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>500 Server Error</title>
+  <style>
+    body { font-family: sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
+    .error-container { text-align: center; max-width: 500px; }
+    h1 { font-size: 72px; margin: 0; color: #f44336; }
+  </style>
+</head>
+<body>
+  <div class="error-container">
+    <h1>500</h1>
+    <h2>서버 오류가 발생했습니다</h2>
+    <p>요청을 처리하는 동안 문제가 발생했습니다. 잠시 후 다시 시도해 주세요.</p>
+    <a href="/">홈으로 돌아가기</a>
+  </div>
+</body>
+</html>
+EOF
+fi
 
 # Check SSL certificates
 if [ ! -f ssl/nest-platform.crt ] || [ ! -f ssl/nest-platform.key ]; then
@@ -55,6 +109,17 @@ if [ ! -f ssl/nest-platform.crt ] || [ ! -f ssl/nest-platform.key ]; then
   openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
     -keyout ssl/nest-platform.key -out ssl/nest-platform.crt \
     -subj "/C=US/ST=State/L=City/O=Organization/CN=nest-platform.example.com"
+fi
+
+# Set environment variables for the frontend
+if [ -z "$API_URL" ]; then
+  export API_URL="http://localhost:3000/api"
+  echo "Setting default API_URL: $API_URL"
+fi
+
+if [ -z "$SERVER_NAME" ]; then
+  export SERVER_NAME="nest-platform.example.com"
+  echo "Setting default SERVER_NAME: $SERVER_NAME"
 fi
 
 # Create Prometheus configuration
@@ -109,7 +174,13 @@ providers:
       path: /etc/grafana/provisioning/dashboards
 EOF
 
+# Make docker-entrypoint.sh executable
+chmod +x client/deploy/docker-entrypoint.sh
+
 # Build and start containers
+echo "Building Nest Platform services..."
+docker-compose build
+
 echo "Starting Nest Platform services..."
 docker-compose up -d
 
@@ -125,9 +196,9 @@ if ! docker-compose ps | grep -q "Up"; then
 fi
 
 echo "Deployment completed successfully!"
-echo "Frontend: https://nest-platform.example.com"
-echo "Admin Panel: https://nest-platform.example.com/admin"
-echo "API: https://nest-platform.example.com/api"
+echo "Frontend: https://$SERVER_NAME"
+echo "Admin Panel: https://$SERVER_NAME/admin"
+echo "API: https://$SERVER_NAME/api"
 echo "Grafana: http://localhost:3000 (internal access only)"
 
 # Display deployment summary

@@ -69,8 +69,16 @@ services:
   # Frontend web application
   frontend:
     build:
-      context: ./client
-      dockerfile: ./deploy/Dockerfile
+      context: ./
+      dockerfile: ./Dockerfile
+      args:
+        - REACT_APP_API_URL=${API_URL:-http://localhost:3000/api}
+        - REACT_APP_CREATA_RPC_MAINNET=${CREATA_RPC_MAINNET}
+        - REACT_APP_CREATA_RPC_TESTNET=${CREATA_RPC_TESTNET}
+        - REACT_APP_NEST_TOKEN_ADDRESS=${NEST_TOKEN_ADDRESS}
+        - REACT_APP_NEST_NFT_ADDRESS=${NEST_NFT_ADDRESS}
+        - REACT_APP_NEST_NAME_REGISTRY_ADDRESS=${NEST_NAME_REGISTRY_ADDRESS}
+        - REACT_APP_NEST_SWAP_ADDRESS=${NEST_SWAP_ADDRESS}
     container_name: nest-frontend
     restart: always
     depends_on:
@@ -78,6 +86,16 @@ services:
     ports:
       - "80:80"
       - "443:443"
+    environment:
+      - API_URL=${API_URL:-http://localhost:3000/api}
+      - API_BACKEND_URL=http://backend:3000
+      - SERVER_NAME=${SERVER_NAME:-nest-platform.example.com}
+      - CREATA_RPC_MAINNET=${CREATA_RPC_MAINNET}
+      - CREATA_RPC_TESTNET=${CREATA_RPC_TESTNET}
+      - NEST_TOKEN_ADDRESS=${NEST_TOKEN_ADDRESS}
+      - NEST_NFT_ADDRESS=${NEST_NFT_ADDRESS}
+      - NEST_NAME_REGISTRY_ADDRESS=${NEST_NAME_REGISTRY_ADDRESS}
+      - NEST_SWAP_ADDRESS=${NEST_SWAP_ADDRESS}
     volumes:
       - ./ssl:/etc/nginx/ssl
     networks:
@@ -123,6 +141,7 @@ services:
     restart: always
     volumes:
       - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./monitoring/rules:/etc/prometheus/rules
       - prometheus-data:/prometheus
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
@@ -147,10 +166,86 @@ services:
     volumes:
       - grafana-data:/var/lib/grafana
       - ./monitoring/grafana/provisioning:/etc/grafana/provisioning
+    ports:
+      - "3001:3000"
     environment:
       - GF_SECURITY_ADMIN_USER=${GRAFANA_USERNAME}
       - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD}
       - GF_USERS_ALLOW_SIGN_UP=false
+    networks:
+      - nest-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+        
+  # Node exporter for hardware metrics
+  node-exporter:
+    image: prom/node-exporter:latest
+    container_name: nest-node-exporter
+    restart: always
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.sysfs=/host/sys'
+      - '--path.rootfs=/rootfs'
+      - '--collector.filesystem.ignored-mount-points=^/(sys|proc|dev|host|etc)($|/)'
+    networks:
+      - nest-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # MongoDB exporter for database metrics
+  mongodb-exporter:
+    image: percona/mongodb_exporter:latest
+    container_name: nest-mongodb-exporter
+    restart: always
+    depends_on:
+      - mongodb
+    environment:
+      - MONGODB_URI=mongodb://${MONGO_USERNAME}:${MONGO_PASSWORD}@mongodb:27017/admin?authSource=admin
+    networks:
+      - nest-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+        
+  # Redis exporter for Redis metrics
+  redis-exporter:
+    image: oliver006/redis_exporter:latest
+    container_name: nest-redis-exporter
+    restart: always
+    depends_on:
+      - redis
+    environment:
+      - REDIS_ADDR=redis://redis:6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+    networks:
+      - nest-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+        
+  # Nginx exporter for web server metrics
+  nginx-exporter:
+    image: nginx/nginx-prometheus-exporter:latest
+    container_name: nest-nginx-exporter
+    restart: always
+    depends_on:
+      - frontend
+    command:
+      - '-nginx.scrape-uri=http://frontend/nginx_status'
     networks:
       - nest-network
     logging:
