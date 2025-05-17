@@ -12,7 +12,7 @@ const missionService = {
    */
   getMissions: async (params = {}) => {
     try {
-      const response = await api.get('/admin/missions', { params });
+      const response = await api.get('/missions', { params });
       return response.data;
     } catch (error) {
       throw new Error(getErrorMessage(error));
@@ -26,7 +26,7 @@ const missionService = {
    */
   getMission: async (id) => {
     try {
-      const response = await api.get(`/admin/missions/${id}`);
+      const response = await api.get(`/missions/${id}`);
       return response.data;
     } catch (error) {
       throw new Error(getErrorMessage(error));
@@ -40,7 +40,7 @@ const missionService = {
    */
   createMission: async (missionData) => {
     try {
-      const response = await api.post('/admin/missions', missionData);
+      const response = await api.post('/missions', missionData);
       return response.data;
     } catch (error) {
       throw new Error(getErrorMessage(error));
@@ -55,7 +55,7 @@ const missionService = {
    */
   updateMission: async (id, missionData) => {
     try {
-      const response = await api.put(`/admin/missions/${id}`, missionData);
+      const response = await api.put(`/missions/${id}`, missionData);
       return response.data;
     } catch (error) {
       throw new Error(getErrorMessage(error));
@@ -69,7 +69,7 @@ const missionService = {
    */
   deleteMission: async (id) => {
     try {
-      const response = await api.delete(`/admin/missions/${id}`);
+      const response = await api.delete(`/missions/${id}`);
       return response.data;
     } catch (error) {
       throw new Error(getErrorMessage(error));
@@ -84,7 +84,7 @@ const missionService = {
    */
   updateMissionStatus: async (id, status) => {
     try {
-      const response = await api.patch(`/admin/missions/${id}/status`, { status });
+      const response = await api.patch(`/missions/${id}/status`, { status });
       return response.data;
     } catch (error) {
       throw new Error(getErrorMessage(error));
@@ -101,7 +101,7 @@ const missionService = {
       const formData = new FormData();
       formData.append('image', file);
 
-      const response = await fileApi.post('/admin/missions/upload-nft-image', formData);
+      const response = await fileApi.post('/missions/upload-nft-image', formData);
       return response.data;
     } catch (error) {
       throw new Error(getErrorMessage(error));
@@ -116,7 +116,7 @@ const missionService = {
    */
   getMissionParticipation: async (id, params = {}) => {
     try {
-      const response = await api.get(`/admin/missions/${id}/participation`, { params });
+      const response = await api.get(`/missions/${id}/participation`, { params });
       return response.data;
     } catch (error) {
       throw new Error(getErrorMessage(error));
@@ -131,7 +131,7 @@ const missionService = {
    */
   getMissionSubmission: async (missionId, userId) => {
     try {
-      const response = await api.get(`/admin/missions/${missionId}/submissions/${userId}`);
+      const response = await api.get(`/missions/${missionId}/submissions/${userId}`);
       return response.data;
     } catch (error) {
       throw new Error(getErrorMessage(error));
@@ -147,7 +147,7 @@ const missionService = {
    */
   issueReward: async (missionId, userId, rewardData) => {
     try {
-      const response = await api.post(`/admin/missions/${missionId}/rewards/${userId}`, rewardData);
+      const response = await api.post(`/missions/${missionId}/rewards/${userId}`, rewardData);
       return response.data;
     } catch (error) {
       throw new Error(getErrorMessage(error));
@@ -161,7 +161,7 @@ const missionService = {
    */
   duplicateMission: async (id) => {
     try {
-      const response = await api.post(`/admin/missions/${id}/duplicate`);
+      const response = await api.post(`/missions/${id}/duplicate`);
       return response.data;
     } catch (error) {
       throw new Error(getErrorMessage(error));
@@ -174,7 +174,7 @@ const missionService = {
    */
   getMissionStats: async () => {
     try {
-      const response = await api.get('/admin/missions/stats');
+      const response = await api.get('/missions/stats');
       return response.data;
     } catch (error) {
       throw new Error(getErrorMessage(error));
@@ -187,7 +187,7 @@ const missionService = {
    */
   getMissionCategories: async () => {
     try {
-      const response = await api.get('/admin/missions/categories');
+      const response = await api.get('/missions/categories');
       return response.data;
     } catch (error) {
       throw new Error(getErrorMessage(error));
@@ -201,10 +201,26 @@ const missionService = {
    */
   exportMissions: async (params = {}) => {
     try {
-      const response = await api.get('/admin/missions/export', {
+      const response = await api.get('/missions/export', {
         params,
         responseType: 'blob'
       });
+      return response.data;
+    } catch (error) {
+      throw new Error(getErrorMessage(error));
+    }
+  },
+
+  /**
+   * 미션 평가
+   * @param {string|number} missionId - 미션 ID
+   * @param {string|number} participationId - 참여 ID
+   * @param {Object} evaluationData - 평가 데이터 (점수, 피드백 등)
+   * @returns {Promise<Object>} 평가 결과
+   */
+  evaluateMissionSubmission: async (missionId, participationId, evaluationData) => {
+    try {
+      const response = await api.put(`/missions/${missionId}/evaluate/${participationId}`, evaluationData);
       return response.data;
     } catch (error) {
       throw new Error(getErrorMessage(error));

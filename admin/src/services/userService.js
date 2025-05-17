@@ -12,7 +12,7 @@ const userService = {
    */
   getUsers: async (params = {}) => {
     try {
-      const response = await api.get('/admin/users', { params });
+      const response = await api.get('/users', { params });
       return response.data;
     } catch (error) {
       throw new Error(getErrorMessage(error));
@@ -26,7 +26,7 @@ const userService = {
    */
   getUser: async (id) => {
     try {
-      const response = await api.get(`/admin/users/${id}`);
+      const response = await api.get(`/users/${id}`);
       return response.data;
     } catch (error) {
       throw new Error(getErrorMessage(error));
@@ -41,7 +41,7 @@ const userService = {
    */
   updateUser: async (id, userData) => {
     try {
-      const response = await api.put(`/admin/users/${id}`, userData);
+      const response = await api.put(`/users/${id}`, userData);
       return response.data;
     } catch (error) {
       throw new Error(getErrorMessage(error));
@@ -56,7 +56,7 @@ const userService = {
    */
   toggleUserStatus: async (id, isActive) => {
     try {
-      const response = await api.patch(`/admin/users/${id}/status`, { isActive });
+      const response = await api.patch(`/users/${id}/status`, { isActive });
       return response.data;
     } catch (error) {
       throw new Error(getErrorMessage(error));
@@ -70,7 +70,7 @@ const userService = {
    */
   getUserWallet: async (id) => {
     try {
-      const response = await api.get(`/admin/users/${id}/wallet`);
+      const response = await api.get(`/users/${id}/wallet`);
       return response.data;
     } catch (error) {
       throw new Error(getErrorMessage(error));
@@ -85,7 +85,7 @@ const userService = {
    */
   getUserActivities: async (id, params = {}) => {
     try {
-      const response = await api.get(`/admin/users/${id}/activities`, { params });
+      const response = await api.get(`/users/${id}/activities`, { params });
       return response.data;
     } catch (error) {
       throw new Error(getErrorMessage(error));
@@ -100,7 +100,7 @@ const userService = {
    */
   getUserNfts: async (id, params = {}) => {
     try {
-      const response = await api.get(`/admin/users/${id}/nfts`, { params });
+      const response = await api.get(`/users/${id}/nfts`, { params });
       return response.data;
     } catch (error) {
       throw new Error(getErrorMessage(error));
@@ -115,7 +115,7 @@ const userService = {
    */
   issueTokens: async (id, tokenData) => {
     try {
-      const response = await api.post(`/admin/users/${id}/tokens`, tokenData);
+      const response = await api.post(`/users/${id}/tokens`, tokenData);
       return response.data;
     } catch (error) {
       throw new Error(getErrorMessage(error));
@@ -130,7 +130,7 @@ const userService = {
    */
   adjustXp: async (id, xpData) => {
     try {
-      const response = await api.post(`/admin/users/${id}/xp`, xpData);
+      const response = await api.post(`/users/${id}/xp`, xpData);
       return response.data;
     } catch (error) {
       throw new Error(getErrorMessage(error));
@@ -145,7 +145,7 @@ const userService = {
    */
   manageNestId: async (id, nestIdData) => {
     try {
-      const response = await api.post(`/admin/users/${id}/nest-id`, nestIdData);
+      const response = await api.post(`/users/${id}/nest-id`, nestIdData);
       return response.data;
     } catch (error) {
       throw new Error(getErrorMessage(error));
@@ -160,7 +160,7 @@ const userService = {
    */
   getUserTransactions: async (id, params = {}) => {
     try {
-      const response = await api.get(`/admin/users/${id}/transactions`, { params });
+      const response = await api.get(`/users/${id}/transactions`, { params });
       return response.data;
     } catch (error) {
       throw new Error(getErrorMessage(error));
@@ -173,7 +173,7 @@ const userService = {
    */
   getUserStats: async () => {
     try {
-      const response = await api.get('/admin/users/stats');
+      const response = await api.get('/users/stats');
       return response.data;
     } catch (error) {
       throw new Error(getErrorMessage(error));
@@ -187,7 +187,7 @@ const userService = {
    */
   exportUsers: async (params = {}) => {
     try {
-      const response = await api.get('/admin/users/export', {
+      const response = await api.get('/users/export', {
         params,
         responseType: 'blob'
       });

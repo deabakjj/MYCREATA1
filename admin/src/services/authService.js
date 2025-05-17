@@ -12,11 +12,11 @@ const authService = {
    */
   login: async (credentials) => {
     try {
-      const response = await api.post('/admin/auth/login', credentials);
+      const response = await api.post('/auth/login', credentials);
       
       // 토큰을 로컬 스토리지에 저장
       if (response.data.token) {
-        localStorage.setItem('admin_token', response.data.token);
+        localStorage.setItem('token', response.data.token);
         localStorage.setItem('admin_user', JSON.stringify(response.data.user));
       }
       
@@ -31,12 +31,12 @@ const authService = {
    * 로컬 스토리지에서 관리자 정보 제거
    */
   logout: () => {
-    localStorage.removeItem('admin_token');
+    localStorage.removeItem('token');
     localStorage.removeItem('admin_user');
     
     // 백엔드 로그아웃 API가 있다면 호출 (선택적)
     try {
-      api.post('/admin/auth/logout');
+      api.post('/auth/logout');
     } catch (error) {
       console.error('로그아웃 API 호출 실패:', error);
     }
@@ -56,7 +56,7 @@ const authService = {
    * @returns {boolean} 로그인 상태 여부
    */
   isAuthenticated: () => {
-    return !!localStorage.getItem('admin_token');
+    return !!localStorage.getItem('token');
   },
   
   /**
@@ -66,7 +66,7 @@ const authService = {
    */
   validateToken: async () => {
     try {
-      const response = await api.get('/admin/auth/validate');
+      const response = await api.get('/auth/validate');
       
       // 최신 사용자 정보로 업데이트
       if (response.data.user) {
@@ -93,7 +93,7 @@ const authService = {
    */
   changePassword: async (passwordData) => {
     try {
-      const response = await api.post('/admin/auth/change-password', passwordData);
+      const response = await api.post('/auth/change-password', passwordData);
       return response.data;
     } catch (error) {
       throw new Error(getErrorMessage(error));
@@ -107,7 +107,7 @@ const authService = {
    */
   requestPasswordReset: async (email) => {
     try {
-      const response = await api.post('/admin/auth/forgot-password', { email });
+      const response = await api.post('/auth/forgot-password', { email });
       return response.data;
     } catch (error) {
       throw new Error(getErrorMessage(error));
@@ -121,7 +121,7 @@ const authService = {
    */
   resetPassword: async (resetData) => {
     try {
-      const response = await api.post('/admin/auth/reset-password', resetData);
+      const response = await api.post('/auth/reset-password', resetData);
       return response.data;
     } catch (error) {
       throw new Error(getErrorMessage(error));

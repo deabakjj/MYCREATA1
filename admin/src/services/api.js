@@ -1,117 +1,103 @@
 import axios from 'axios';
 
-/**
- * 관리자 API 서비스 기본 설정
- * 모든 API 요청에 공통적으로 적용되는 설정과 인터셉터 정의
- */
-
-// API 기본 URL 설정
-const baseURL = process.env.REACT_APP_API_URL || 'http://localhost:3001/api';
+// 환경 변수에서 API URL 가져오기
+const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3000/api';
 
 // Axios 인스턴스 생성
 const api = axios.create({
-  baseURL,
-  timeout: 30000, // 30초 타임아웃
+  baseURL: API_URL,
   headers: {
     'Content-Type': 'application/json',
   },
 });
 
-// 요청 인터셉터 - 인증 토큰 추가
-api.interceptors.request.use(
-  (config) => {
-    // 로컬 스토리지에서 인증 토큰 가져오기
-    const token = localStorage.getItem('admin_token');
-    
-    // 토큰이 있으면 헤더에 추가
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
-    }
-    
-    return config;
-  },
-  (error) => {
-    return Promise.reject(error);
-  }
-);
-
-// 응답 인터셉터 - 오류 처리 및 토큰 만료 대응
-api.interceptors.response.use(
-  (response) => {
-    return response;
-  },
-  (error) => {
-    // 인증 오류(401) 처리 - 토큰 만료 등
-    if (error.response && error.response.status === 401) {
-      // 토큰 제거 및 로그인 페이지로 리다이렉트
-      localStorage.removeItem('admin_token');
-      window.location.href = '/admin/login';
-    }
-    
-    // 권한 오류(403) 처리
-    if (error.response && error.response.status === 403) {
-      // 권한 없음 페이지로 리다이렉트 또는 경고 표시
-      console.error('접근 권한이 없습니다.');
-    }
-    
-    return Promise.reject(error);
-  }
-);
-
-export default api;
-
-/**
- * API 오류 메시지 추출 유틸리티 함수
- * @param {Error} error - Axios 오류 객체
- * @returns {string} 사용자에게 표시할 오류 메시지
- */
-export const getErrorMessage = (error) => {
-  if (error.response && error.response.data && error.response.data.message) {
-    return error.response.data.message;
-  }
-  
-  if (error.message) {
-    // 타임아웃 오류 메시지 변환
-    if (error.message.includes('timeout')) {
-      return '서버 응답 시간이 초과되었습니다. 나중에 다시 시도해주세요.';
-    }
-    return error.message;
-  }
-  
-  return '오류가 발생했습니다. 나중에 다시 시도해주세요.';
-};
-
-/**
- * 파일 업로드용 API 인스턴스
- * multipart/form-data 요청을 위한 별도 설정
- */
-export const fileApi = axios.create({
-  baseURL,
-  timeout: 60000, // 파일 업로드는 더 긴 타임아웃 (60초)
+// 파일 업로드용 별도 인스턴스
+const fileApi = axios.create({
+  baseURL: API_URL,
   headers: {
     'Content-Type': 'multipart/form-data',
   },
 });
 
-// 파일 업로드 API에도 동일한 인터셉터 적용
-fileApi.interceptors.request.use(
+/**
+ * API 오류 메시지 추출 함수
+ * @param {Error} error - axios 오류 객체
+ * @returns {string} 사용자에게 표시할 오류 메시지
+ */
+const getErrorMessage = (error) => {
+  if (error.response && error.response.data && error.response.data.message) {
+    return error.response.data.message;
+  } else if (error.response && error.response.statusText) {
+    return `${error.response.status}: ${error.response.statusText}`;
+  } else if (error.message) {
+    return error.message;
+  } else {
+    return '알 수 없는 오류가 발생했습니다.';
+  }
+};
+
+// 요청 인터셉터: 토큰 추가 및 요청 로깅
+api.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem('admin_token');
+    // 로컬 스토리지에서 토큰 가져오기
+    const token = localStorage.getItem('token');
+    
+    // 토큰이 있으면 헤더에 추가
     if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
+      config.headers['Authorization'] = `Bearer ${token}`;
     }
+    
     return config;
   },
-  (error) => Promise.reject(error)
-);
-
-fileApi.interceptors.response.use(
-  (response) => response,
   (error) => {
-    if (error.response && error.response.status === 401) {
-      localStorage.removeItem('admin_token');
-      window.location.href = '/admin/login';
-    }
+    console.error('API 요청 오류:', error);
     return Promise.reject(error);
   }
 );
+
+// 파일 API에도 동일한 인터셉터 적용
+fileApi.interceptors.request.use(
+  (config) => {
+    const token = localStorage.getItem('token');
+    if (token) {
+      config.headers['Authorization'] = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error) => {
+    console.error('File API 요청 오류:', error);
+    return Promise.reject(error);
+  }
+);
+
+// 응답 인터셉터: 토큰 만료 처리 및 응답 로깅
+const responseInterceptor = (response) => {
+  return response;
+};
+
+const errorInterceptor = (error) => {
+  // 인증 에러 (401) 처리
+  if (error.response && error.response.status === 401) {
+    // 토큰 만료 등의 이유로 인증 실패
+    localStorage.removeItem('token');
+    
+    // 현재 페이지가 로그인 페이지가 아니면 로그인 페이지로 리디렉션
+    if (window.location.pathname !== '/login') {
+      window.location.href = '/login';
+    }
+  } else if (error.response && error.response.status === 403) {
+    // 권한 에러 (403) 처리
+    console.error('권한이 부족합니다:', error.response.data);
+  } else if (error.response && error.response.status === 429) {
+    // 요청 비율 제한 (429) 처리
+    console.error('요청이 너무 많습니다. 잠시 후 다시 시도해주세요:', error.response.data);
+  }
+  
+  return Promise.reject(error);
+};
+
+api.interceptors.response.use(responseInterceptor, errorInterceptor);
+fileApi.interceptors.response.use(responseInterceptor, errorInterceptor);
+
+export { fileApi, getErrorMessage };
+export default api;
