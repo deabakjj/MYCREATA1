@@ -1,0 +1,92 @@
+groups:
+  - name: nest-platform-alerts
+    rules:
+      - alert: HighRequestLatency
+        expr: avg(http_request_duration_seconds{job="nest-backend", quantile="0.95"}) > 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High request latency"
+          description: "API request latency is above 1s (current value: {{ $value }}s)"
+
+      - alert: HighErrorRate
+        expr: sum(increase(http_request_duration_seconds_count{job="nest-backend", status_code=~"5.."}[5m])) / sum(increase(http_request_duration_seconds_count{job="nest-backend"}[5m])) > 0.05
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "High error rate"
+          description: "Error rate is above 5% (current value: {{ $value | humanizePercentage }})"
+
+      - alert: ServiceDown
+        expr: up{job=~"nest.*"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Service is down"
+          description: "{{ $labels.job }} service is down"
+
+      - alert: HighCPUUsage
+        expr: 100 - (avg by(instance) (irate(node_cpu_seconds_total{job="node-exporter", mode="idle"}[5m])) * 100) > 80
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High CPU usage"
+          description: "CPU usage is above 80% (current value: {{ $value | humanizePercentage }})"
+
+      - alert: HighMemoryUsage
+        expr: (node_memory_MemTotal_bytes{job="node-exporter"} - node_memory_MemFree_bytes{job="node-exporter"} - node_memory_Buffers_bytes{job="node-exporter"} - node_memory_Cached_bytes{job="node-exporter"}) / node_memory_MemTotal_bytes{job="node-exporter"} * 100 > 80
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High memory usage"
+          description: "Memory usage is above 80% (current value: {{ $value | humanizePercentage }})"
+
+      - alert: HighDiskUsage
+        expr: (node_filesystem_size_bytes{job="node-exporter", fstype!="tmpfs"} - node_filesystem_free_bytes{job="node-exporter", fstype!="tmpfs"}) / node_filesystem_size_bytes{job="node-exporter", fstype!="tmpfs"} * 100 > 85
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High disk usage"
+          description: "Disk usage is above 85% (current value: {{ $value | humanizePercentage }})"
+
+      - alert: MongoDBDown
+        expr: up{job="mongodb-exporter"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "MongoDB is down"
+          description: "MongoDB database is not available"
+
+      - alert: RedisDown
+        expr: up{job="redis-exporter"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Redis is down"
+          description: "Redis cache is not available"
+
+      - alert: FrontendDown
+        expr: up{job="nginx-exporter"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Frontend is down"
+          description: "Nginx frontend service is not available"
+
+      - alert: HighRateLimiting
+        expr: sum(increase(http_rate_limit_exceeded_total{job="nest-backend"}[5m])) > 100
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High rate limiting"
+          description: "Many requests are being rate limited ({{ $value }} in the last 5 minutes)"

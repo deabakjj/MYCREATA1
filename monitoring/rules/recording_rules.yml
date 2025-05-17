@@ -1,0 +1,72 @@
+groups:
+  - name: nest-platform-recording-rules
+    interval: 30s
+    rules:
+      # API 성능 메트릭
+      - record: job:http_request_duration_seconds:avg_rate5m
+        expr: avg by (job, route) (rate(http_request_duration_seconds_sum{job="nest-backend"}[5m]) / rate(http_request_duration_seconds_count{job="nest-backend"}[5m]))
+
+      - record: job:http_request_duration_seconds:p95_rate5m
+        expr: histogram_quantile(0.95, sum by (job, route, le) (rate(http_request_duration_seconds_bucket{job="nest-backend"}[5m])))
+
+      - record: job:http_request_total:rate5m
+        expr: sum by (job, route, method, status_code) (rate(http_request_duration_seconds_count{job="nest-backend"}[5m]))
+
+      - record: job:http_errors_total:rate5m
+        expr: sum by (job, route) (rate(http_request_duration_seconds_count{job="nest-backend", status_code=~"[45].."}[5m]))
+
+      - record: job:http_error_ratio:rate5m
+        expr: sum by (job, route) (rate(http_request_duration_seconds_count{job="nest-backend", status_code=~"[45].."}[5m])) / sum by (job, route) (rate(http_request_duration_seconds_count{job="nest-backend"}[5m]))
+
+      # 시스템 리소스 메트릭
+      - record: job:node_cpu_utilization:avg1m
+        expr: 100 - (avg by (job, instance) (irate(node_cpu_seconds_total{job="node-exporter", mode="idle"}[1m])) * 100)
+
+      - record: job:node_memory_utilization:avg1m
+        expr: 100 * (1 - ((node_memory_MemFree_bytes{job="node-exporter"} + node_memory_Cached_bytes{job="node-exporter"} + node_memory_Buffers_bytes{job="node-exporter"}) / node_memory_MemTotal_bytes{job="node-exporter"}))
+
+      - record: job:node_filesystem_utilization:avg1m
+        expr: 100 * (1 - (node_filesystem_free_bytes{job="node-exporter", fstype!="tmpfs"} / node_filesystem_size_bytes{job="node-exporter", fstype!="tmpfs"}))
+
+      - record: job:node_network_receive_bytes:rate1m
+        expr: sum by (job, instance, device) (rate(node_network_receive_bytes_total{job="node-exporter", device!="lo"}[1m]))
+
+      - record: job:node_network_transmit_bytes:rate1m
+        expr: sum by (job, instance, device) (rate(node_network_transmit_bytes_total{job="node-exporter", device!="lo"}[1m]))
+
+      # MongoDB 메트릭
+      - record: job:mongodb_connections:active
+        expr: mongodb_connections{job="mongodb-exporter", state="current"}
+
+      - record: job:mongodb_op_counters:rate1m
+        expr: sum by (job, instance, type) (rate(mongodb_op_counters_total{job="mongodb-exporter"}[1m]))
+
+      # Redis 메트릭
+      - record: job:redis_connected_clients:current
+        expr: redis_connected_clients{job="redis-exporter"}
+
+      - record: job:redis_commands:rate1m
+        expr: sum by (job, instance) (rate(redis_commands_total{job="redis-exporter"}[1m]))
+
+      - record: job:redis_memory_utilization:ratio
+        expr: redis_memory_used_bytes{job="redis-exporter"} / redis_memory_max_bytes{job="redis-exporter"}
+
+      # 비즈니스 메트릭
+      - record: nest:user_registrations:rate1h
+        expr: rate(nest_user_registrations_total{job="nest-backend"}[1h])
+
+      - record: nest:mission_completions:rate1h
+        expr: rate(nest_mission_completions_total{job="nest-backend"}[1h])
+
+      - record: nest:token_transfers:rate1h
+        expr: rate(nest_token_transfers_total{job="nest-backend"}[1h])
+
+      - record: nest:nft_mints:rate1h
+        expr: rate(nest_nft_mints_total{job="nest-backend"}[1h])
+
+      - record: nest:active_users:day
+        expr: sum(nest_active_users_total{job="nest-backend", period="day"})
+
+      # 전체 시스템 건강 상태
+      - record: nest:system_health:score
+        expr: avg(up{job=~"nest.*"})
